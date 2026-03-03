@@ -2,7 +2,6 @@
   "name": "md-link-checker",
   "version": "1.0.0",
   "description": "Zero-dependency CLI tool to check links in Markdown files",
-  "main": "lib/parser.js",
   "bin": {
     "md-link-checker": "./bin/md-link-checker.js"
   },

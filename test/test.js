@@ -150,6 +150,17 @@ test('Parser: image reference-style link', (t) => {
   assert.strictEqual(links[0].isImage, true);
 });
 
+test('Parser: same URL with different text on same line both captured', (t) => {
+  // Two links to the same URL but with different link text — both must be preserved
+  const content = '[click here](https://example.com) and [read more](https://example.com)';
+  const links = parseLinks(content, '/fake/file.md');
+  assert.strictEqual(links.length, 2, 'both links should be captured');
+  assert.strictEqual(links[0].text, 'click here');
+  assert.strictEqual(links[1].text, 'read more');
+  assert.strictEqual(links[0].url, 'https://example.com');
+  assert.strictEqual(links[1].url, 'https://example.com');
+});
+
 // ============================================================
 // CHECKER TESTS (with HTTP mock server)
 // ============================================================
@@ -170,6 +181,14 @@ test('Checker: HTTP mock server tests', async (t) => {
     } else if (req.url === '/method-not-allowed') {
       if (req.method === 'HEAD') {
         res.writeHead(405);
+        res.end();
+      } else {
+        res.writeHead(200);
+        res.end();
+      }
+    } else if (req.url === '/forbidden') {
+      if (req.method === 'HEAD') {
+        res.writeHead(403);
         res.end();
       } else {
         res.writeHead(200);
@@ -214,6 +233,13 @@ test('Checker: HTTP mock server tests', async (t) => {
 
     await t.test('405 Method Not Allowed - fallback to GET', async () => {
       const link = { url: `http://localhost:${PORT}/method-not-allowed`, isAnchorOnly: false };
+      const result = await checkLink(link, { timeout: 3000 });
+      assert.strictEqual(result.status, 'ok');
+      assert.strictEqual(result.statusCode, 200);
+    });
+
+    await t.test('403 Forbidden on HEAD - fallback to GET succeeds', async () => {
+      const link = { url: `http://localhost:${PORT}/forbidden`, isAnchorOnly: false };
       const result = await checkLink(link, { timeout: 3000 });
       assert.strictEqual(result.status, 'ok');
       assert.strictEqual(result.statusCode, 200);
@@ -334,6 +360,21 @@ test('Scanner: matchesGlob exact match', () => {
   assert.ok(!matchesGlob('file.md', 'other.md'));
 });
 
+test('Scanner: matchesGlob single * does not match / in full path patterns', () => {
+  // When pattern has a /, it matches against full path and * should not cross /
+  assert.ok(!matchesGlob('docs/*.md', 'docs/subdir/file.md'));
+  assert.ok(matchesGlob('docs/*.md', 'docs/file.md'));
+  // Bare pattern (no /) matches against basename, so subdir/file.md basename is file.md
+  assert.ok(matchesGlob('*.md', 'file.md'));
+  assert.ok(matchesGlob('*.md', 'subdir/file.md')); // basename match
+});
+
+test('Scanner: matchesGlob ** matches across directories', () => {
+  assert.ok(matchesGlob('**/*.md', 'subdir/file.md'));
+  assert.ok(matchesGlob('**/*.md', 'a/b/c/file.md'));
+  assert.ok(!matchesGlob('**/*.md', 'file.txt'));
+});
+
 test('Scanner: scan a single markdown file', () => {
   const filePath = path.join(FIXTURES_DIR, 'valid.md');
   const result = scanPaths([filePath], {});
@@ -363,11 +404,6 @@ test('Scanner: non-markdown files are excluded', () => {
   const tmpFile = path.join(FIXTURES_DIR, 'temp.txt');
   fs.writeFileSync(tmpFile, 'not markdown');
   try {
-    const result = scanPaths([FIXTURES_DIR], {});
-    const hastxt = result.some((f) => f.endsWith('.txt'));
-    assert.ok(!hasxt, 'should not include .txt files');
-  } catch (err) {
-    // If assertion about variable typo passes, we're fine
     const result = scanPaths([FIXTURES_DIR], {});
     const hasTxt = result.some((f) => f.endsWith('.txt'));
     assert.ok(!hasTxt, 'should not include .txt files');

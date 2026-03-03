@@ -155,6 +155,7 @@ async function main() {
 
   // 3. Process each file: parse + check
   const fileResults = [];
+  let readWarnings = 0;
 
   for (const filePath of markdownFiles) {
     let content;
@@ -162,6 +163,7 @@ async function main() {
       content = fs.readFileSync(filePath, 'utf8');
     } catch (err) {
       process.stderr.write(`Warning: Could not read ${filePath}: ${err.message}\n`);
+      readWarnings++;
       continue;
     }
 
@@ -180,6 +182,12 @@ async function main() {
       file: filePath,
       links: links.map((link, i) => ({ link, result: results[i] })),
     });
+  }
+
+  // If every discovered file failed to be read, that's a fatal-level problem
+  if (readWarnings > 0 && fileResults.length === 0) {
+    process.stderr.write(`Error: All ${readWarnings} file(s) could not be read.\n`);
+    process.exit(2);
   }
 
   // 4. Report
